@@ -1,71 +1,104 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:http/http.dart' as http;
+import 'package:movie_bloc/bloc/fetch_movie_event.dart';
+import 'package:movie_bloc/bloc/fetch_movies_bloc.dart';
+import 'package:movie_bloc/bloc/user_state.dart';
+import 'package:movie_bloc/model/movie_item.dart';
+import 'package:movie_bloc/provider/movie_http_client.dart';
+import 'package:movie_bloc/repository/movie_repository.dart';
 
 void main() {
   runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  // This widget is the root of your application.
+
   @override
   Widget build(BuildContext context) {
+    final MovieRepository movieRepository = MovieRepository(
+      movieApiClient: MovieApiClient(httpClient: http.Client()),
+    );
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+      title: 'Movie List Bloc',
+      home: UsersPage(
+        movieRepository: movieRepository,
       ),
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
-  final String title;
+class UsersPage extends StatefulWidget {
+  final MovieRepository movieRepository;
+
+  const UsersPage({Key key, this.movieRepository}) : super(key: key);
 
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  _MoviePageState createState() => _MoviePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _MoviePageState extends State<UsersPage> {
+  MovieBloc _movieBloc;
 
-  void _incrementCounter() {
-    setState(() {
-      _counter++;
-    });
+  @override
+  void initState() {
+    _movieBloc = MovieBloc(movieRepository: widget.movieRepository);
+    _movieBloc.add(FetchMovies());
+    super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: Text('Movie Bloc App'),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      body: BlocBuilder<MovieBloc, MovieItemState>(
+          bloc: _movieBloc,
+          builder: (context, state) {
+            if (state is MovieItemRequesting) {
+              return Center(
+                child: CircularProgressIndicator(),
+              );
+            }
+            if (state is MovieItemCompleted) {
+              return _buildListView(state.movies);
+            }
+            if (state is MovieOnError) {
+              return Center(
+                child: Text('Oops Error Occurred'),
+              );
+            }
+            return Container();
+          }),
     );
+  }
+
+  ListView _buildListView(List<MovieItem> movies) {
+
+    return ListView.builder(
+      itemBuilder: (context, i) {
+        return Container(height: 300, padding: EdgeInsets.only(left: 10, right: 10), child: Card(
+          semanticContainer: true,
+          clipBehavior: Clip.antiAliasWithSaveLayer,
+          child: Image.network(
+            movies[i].banner.toString(),
+            fit: BoxFit.fill,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10.0),
+          ),
+          elevation: 5,
+          margin: EdgeInsets.all(10),
+        ),);
+      },
+      itemCount: movies.length,
+    );
+  }
+
+  @override
+  void dispose() {
+    _movieBloc.close();
+    super.dispose();
   }
 }
